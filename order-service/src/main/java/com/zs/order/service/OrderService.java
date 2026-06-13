@@ -8,6 +8,9 @@ import com.zs.order.entity.OutboxEvent;
 import com.zs.order.event.OrderCreatedEvent;
 import com.zs.order.repository.OrderRepository;
 import com.zs.order.repository.OutboxEventRepository;
+import com.zs.order.entity.SagaState;
+import com.zs.order.entity.SagaTracker;
+import com.zs.order.repository.SagaTrackerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +25,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OutboxEventRepository outboxEventRepository;
+    private final SagaTrackerRepository sagaTrackerRepository;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule());
 
@@ -37,8 +41,11 @@ public class OrderService {
         Order saved = orderRepository.save(order);
         log.info("Order created — id: {}", saved.getId());
 
-        // Se o serviço cair aqui, o pedido e o evento rollback juntos
-        // Se o serviço cair depois do commit, o OutboxPublisher vai retentar
+        sagaTrackerRepository.save(SagaTracker.builder()
+                .orderId(saved.getId())
+                .state(SagaState.PENDING)
+                .build());
+
         OrderCreatedEvent event = new OrderCreatedEvent(
                 saved.getId(),
                 saved.getCustomerName(),
@@ -50,14 +57,12 @@ public class OrderService {
 
         try {
             String payload = objectMapper.writeValueAsString(event);
-            OutboxEvent outboxEvent = OutboxEvent.builder()
+            outboxEventRepository.save(OutboxEvent.builder()
                     .aggregateId(saved.getId())
                     .eventType("OrderCreated")
                     .topic("order-events")
                     .payload(payload)
-                    .build();
-
-            outboxEventRepository.save(outboxEvent);
+                    .build());
             log.info("Outbox event saved for orderId: {}", saved.getId());
         } catch (Exception e) {
             throw new RuntimeException("Failed to serialize OrderCreatedEvent", e);
@@ -69,5 +74,10 @@ public class OrderService {
     public Order getOrder(UUID id) {
         return orderRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + id));
+    }
+
+    public SagaTracker getSagaStatus(UUID orderId) {
+        return sagaTrackerRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Saga not found for orderId: " + orderId));
     }
 }

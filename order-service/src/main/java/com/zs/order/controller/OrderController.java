@@ -2,6 +2,7 @@ package com.zs.order.controller;
 
 import com.zs.order.entity.Order;
 import com.zs.order.entity.OrderRequest;
+import com.zs.order.entity.SagaTracker;
 import com.zs.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,5 +26,10 @@ public class OrderController {
     @GetMapping("/{id}")
     public ResponseEntity<Order> getOrder(@PathVariable UUID id) {
         return ResponseEntity.ok(orderService.getOrder(id));
+    }
+
+    @GetMapping("/{id}/saga-status")
+    public ResponseEntity<SagaTracker> getSagaStatus(@PathVariable UUID id) {
+        return ResponseEntity.ok(orderService.getSagaStatus(id));
     }
 }
